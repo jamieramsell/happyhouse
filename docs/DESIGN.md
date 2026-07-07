@@ -15,25 +15,34 @@ Foundational decisions:
 
 ## 1. System architecture
 
-```
-                        ┌─────────────────────────────┐
-   Phone / Laptop       │   VPS (Docker Compose)      │
- ┌───────────────┐      │  ┌───────────────────────┐  │
- │  Happyhouse   │HTTPS │  │ Traefik (TLS, routing)│  │
- │  PWA (React)  ├──────┼──►     /api/v1/...       │  │
- └───────────────┘      │  └───┬────┬────┬────┬────┘  │
-                        │      │    │    │    │       │
-                        │   ┌──▼─┐┌─▼──┐┌▼───┐┌▼────┐ │
-                        │   │auth││hshd││kitty││chore│ │
-                        │   │(Go)││(Go)││(C#) ││(C#) │ │
-                        │   └──┬─┘└─┬──┘└┬───┘└┬────┘ │
-                        │      └────┴────┴─────┘      │
-                        │   ┌────────▼──────────┐     │
-                        │   │ Postgres (1 inst, │     │
-                        │   │ 1 DB per service) │     │
-                        │   └───────────────────┘     │
-                        │   [NATS event bus — Phase 5]│
-                        └─────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph Client["Phone / Laptop"]
+        PWA["Happyhouse PWA (React)"]
+    end
+
+    subgraph VPS["VPS — Docker Compose"]
+        Traefik["Traefik\nTLS + path routing\n/api/v1/..."]
+
+        subgraph Services["Services"]
+            auth["auth\n(Go)"]
+            household["household\n(Go)"]
+            kitty["kitty\n(C#)"]
+            chores["chores\n(C#)"]
+        end
+
+        Postgres[("Postgres\n1 instance\n1 DB per service")]
+        NATS["NATS event bus\n(Phase 5)"]
+    end
+
+    PWA -- HTTPS --> Traefik
+    Traefik --> auth
+    Traefik --> household
+    Traefik --> kitty
+    Traefik --> chores
+
+    auth & household & kitty & chores --> Postgres
+    household & kitty & chores -. "Phase 5" .-> NATS
 ```
 
 ### 1.1 Services and language assignment
