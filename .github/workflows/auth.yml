@@ -1,0 +1,30 @@
+name: auth
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/auth/**"
+      - ".github/workflows/auth.yml"
+  pull_request:
+    paths:
+      - "services/auth/**"
+      - ".github/workflows/auth.yml"
+
+defaults:
+  run:
+    working-directory: services/auth
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          # No external modules yet (no go.sum), so module caching is a no-op.
+          cache: false
+      - run: go vet ./...
+      - run: go build ./...
+      - run: go test ./...

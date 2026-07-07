@@ -13,14 +13,14 @@ Each phase ends with something usable. Kitty lands before chores because it's th
 | **6** | Chores: recurrence, rota generation, swaps, completions, stats + UI | Scheduling, fairness algorithms |
 | **7** | Polish: recurring expenses, CSV export, offline caching, push notifications, exact settlement DP | PWA depth, stretch algorithms |
 
-## Phase 0 — Skeleton
+## Phase 0 — Skeleton ✅
 
-- [ ] Monorepo layout (`frontend/`, `services/`, `libs/`, `deploy/`, `docs/`)
-- [ ] `deploy/docker-compose.dev.yml`: Traefik + Postgres + placeholder services
-- [ ] Hello-world Go service (`services/auth`) behind `/api/v1/auth/healthz`
-- [ ] Hello-world ASP.NET Core service (`services/kitty`) behind `/api/v1/kitty/healthz`
-- [ ] Vite + React + TS PWA shell, installable, served via Traefik
-- [ ] GitHub Actions: path-filtered build + test per service
+- [x] Monorepo layout (`frontend/`, `services/`, `libs/`, `deploy/`, `docs/`)
+- [x] `deploy/docker-compose.dev.yml`: Traefik + Postgres + placeholder services
+- [x] Hello-world Go service (`services/auth`) behind `/api/v1/auth/healthz`
+- [x] Hello-world ASP.NET Core service (`services/kitty`) behind `/api/v1/kitty/healthz`
+- [x] Vite + React + TS PWA shell, installable, served via Traefik
+- [x] GitHub Actions: path-filtered build + test per service
 
 ## Phase 1 — Auth
 

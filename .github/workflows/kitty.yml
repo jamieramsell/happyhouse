@@ -1,0 +1,28 @@
+name: kitty
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/kitty/**"
+      - ".github/workflows/kitty.yml"
+  pull_request:
+    paths:
+      - "services/kitty/**"
+      - ".github/workflows/kitty.yml"
+
+defaults:
+  run:
+    working-directory: services/kitty
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet restore tests/Kitty.Api.Tests/Kitty.Api.Tests.csproj
+      - run: dotnet build tests/Kitty.Api.Tests/Kitty.Api.Tests.csproj --no-restore -c Release
+      - run: dotnet test tests/Kitty.Api.Tests/Kitty.Api.Tests.csproj --no-build -c Release

@@ -1,0 +1,95 @@
+# Happyhouse — local development stack.
+#
+# Traefik terminates HTTP on :80 and path-routes to each service:
+#   /api/v1/auth/*   -> auth   (Go)
+#   /api/v1/kitty/*  -> kitty  (C#)
+#   /*               -> frontend (PWA, served by nginx)
+#
+# Run from the repo root:
+#   docker compose -f deploy/docker-compose.dev.yml --env-file deploy/.env up --build
+#
+# Then open http://localhost — the app shell should show auth + kitty as "ok".
+
+name: happyhouse
+
+services:
+  traefik:
+    image: traefik:v3.3
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --api.dashboard=true
+      - --api.insecure=true # dev only: dashboard on :8081 without auth
+    ports:
+      - "80:80"
+      - "8081:8080" # Traefik dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - auth
+      - kitty
+      - frontend
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432" # exposed for local psql / tooling
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  auth:
+    build:
+      context: ../services/auth
+    environment:
+      PORT: "8080"
+      # Ready for Phase 1; unused in Phase 0.
+      DATABASE_URL: postgres://auth_svc:auth_dev_pw@postgres:5432/auth_db?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.auth.rule=PathPrefix(`/api/v1/auth`)
+      - traefik.http.routers.auth.entrypoints=web
+      - traefik.http.services.auth.loadbalancer.server.port=8080
+
+  kitty:
+    build:
+      context: ../services/kitty
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      # Ready for Phase 3; unused in Phase 0.
+      ConnectionStrings__Default: Host=postgres;Port=5432;Database=kitty_db;Username=kitty_svc;Password=kitty_dev_pw
+    depends_on:
+      postgres:
+        condition: service_healthy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.kitty.rule=PathPrefix(`/api/v1/kitty`)
+      - traefik.http.routers.kitty.entrypoints=web
+      - traefik.http.services.kitty.loadbalancer.server.port=8080
+
+  frontend:
+    build:
+      context: ../frontend
+    labels:
+      - traefik.enable=true
+      # Catch-all at the lowest priority so the /api/* routers win.
+      - traefik.http.routers.frontend.rule=PathPrefix(`/`)
+      - traefik.http.routers.frontend.entrypoints=web
+      - traefik.http.routers.frontend.priority=1
+      - traefik.http.services.frontend.loadbalancer.server.port=80
+
+volumes:
+  pgdata:
