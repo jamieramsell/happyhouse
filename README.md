@@ -1,6 +1,13 @@
 # Happyhouse 🏠
 
-> A shared-household app for uni houses: a shared-cost **kitty**, a **fair chore rota**, and **spending & chore statistics**, installable on iOS and Android as a PWA.
+A shared-household app for uni houses:
+
+- 🏦 **Kitty** — shared costs with flexible splits and transfer-minimising settlements
+- 🧹 **Chores** — a fair, effort-weighted rota
+- 👛 **Wallet** — your own personal accounts, income, and budgets, with drift-free reconciliation against your real bank balance
+- 📊 **Statistics** for all of the above
+
+Installable on iOS and Android as a PWA.
 
 [![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](CHANGELOG.md)
 [![Versioning](https://img.shields.io/badge/versioning-semantic-brightgreen.svg)](https://semver.org)
@@ -36,6 +43,7 @@ It is also a deliberate learning project: polyglot **microservices** in **Go** a
 ### Statistics
 - **Kitty** — total spend, by category, by payer, per-member share, trend over time (money movements excluded)
 - **Chores** — completed/missed rates per member and per chore, streaks, and a "most reliable housemate" leaderboard
+- **Wallet** - spend by category with budget-vs-actual, income expected-vs-actual over time, account balance trend, and a projected-remaining/runway figure (available funds minus known future commitments)
 - Standard period picker everywhere: week / month / year / all-time / custom range
 
 ### Platform
@@ -55,9 +63,10 @@ Polyglot microservices behind a Traefik gateway, one Postgres instance with a da
 |---|---|
 | Frontend | React + TypeScript PWA (Vite) |
 | `auth` service | Go |
-| `household` service | Go *(Phase 2)* |
+| `household` service | Go |
 | `kitty` service | C# / ASP.NET Core |
-| `chores` service | C# / ASP.NET Core *(Phase 6)* |
+| `chores` service | C# / ASP.NET Core |
+| `wallet` service | C# / ASP.NET Core |
 | Data | Postgres (one instance, one DB per service) |
 | Edge | Traefik (TLS + path routing) |
 | Events | NATS event bus *(Phase 5)* |
@@ -112,7 +121,7 @@ happyhouse/
 └── README.md
 ```
 
-Planned (see `DESIGN.md`): `services/household/` and `services/chores/`, plus `libs/go-common` and `libs/dotnet-common` for shared JWT middleware, the recurrence model, error types, and event envelopes.
+Planned (see `DESIGN.md`): `services/household/`, `services/chores/`, and `services/wallet/`, plus `libs/go-common` and `libs/dotnet-common` for shared JWT middleware, the recurrence model, error types, and event envelopes.
 
 ---
 

@@ -2,7 +2,14 @@
 
 ## Project Overview
 
-**happyhouse** is a shared-household app for a uni house (~5 users): track shared costs in a **kitty** (flexible splits, transfer-minimising settlements), run a **fair chore rota**, and see **spending & chore statistics**, installable on iOS and Android as a PWA.
+A shared-household app for uni houses:
+
+- 🏦 **Kitty** — shared costs with flexible splits and transfer-minimising settlements
+- 🧹 **Chores** — a fair, effort-weighted rota
+- 👛 **Wallet** — your own personal accounts, income, and budgets, with drift-free reconciliation against your real bank balance
+- 📊 **Statistics** for all of the above
+
+Installable on iOS and Android as a PWA.
 
 It is equally a **learning project**: first hands-on experience with **microservices**, and learning **Go and C#** (coming from a Java background). The design deliberately pushes the boat out where it teaches something and stays pragmatic where it doesn't. It is in early development: the Phase 0 skeleton (Compose stack, hello-world services, PWA shell, CI) is complete, but the domains are mostly still to be built.
 
@@ -13,9 +20,10 @@ Polyglot microservices behind a Traefik gateway, one Postgres instance with a da
 | Service | Language / Stack | Responsibility |
 |---|---|---|
 | `auth` | Go | Users, credentials, JWT issuance, refresh tokens, profiles |
-| `household` | Go *(Phase 2)* | Households, membership, roles, invites, activity feed |
+| `household` | Go | Households, membership, roles, invites, activity feed |
 | `kitty` | C# / ASP.NET Core | Expenses, splits, money movements, balances, settlements, spend stats |
-| `chores` | C# / ASP.NET Core *(Phase 6)* | Chores, occurrences, rota, swaps, completions, chore stats |
+| `chores` | C# / ASP.NET Core | Chores, occurrences, rota, swaps, completions, chore stats |
+| `wallet` | C# / ASP.NET Core | Income and expenses, money movements, actual vs expected balance, money stats |
 | `frontend` | React + TypeScript PWA (Vite) | UI, service worker, offline shell |
 
 Supporting pieces: **Traefik** (TLS + path routing, `/api/v1/...`), **Postgres** (one container, one DB + credentials per service), **NATS** (event bus, Phase 5). Statistics live **inside the owning service** — no separate reporting service. See [`docs/DESIGN.md`](docs/DESIGN.md) for the full rationale and [`docs/ROADMAP.md`](docs/ROADMAP.md) for the phased build plan.
@@ -122,7 +130,7 @@ The language-specific conventions below are how those guides apply to each servi
 - **Packages**: one package per concern; `internal/` for non-exported service code.
 - **Tests**: standard library `testing`, co-located `_test.go` files in the same package (e.g. `router_test.go` beside `router.go`).
 
-### C# (`kitty`, `chores`)
+### C# (`kitty`, `chores`, `wallet`)
 
 - **Style**: conform to [Microsoft's C# coding conventions](https://learn.microsoft.com/en-us/dotnet/csharp/fundamentals/coding-style/coding-conventions); keep `dotnet format` clean and let the built-in Roslyn analyzers/`.editorconfig` enforce it.
 - **Interfaces**: prefix with `I` — idiomatic C# — e.g. `IExpenseRepository`, `IEventRepository`.
