@@ -2,7 +2,7 @@
 
 ## Context
 
-Happyhouse is a shared-household app for a uni house (~5 users): shared-cost ("kitty") tracking with flexible splits and transfer-minimising settlement, a fairness-balanced chore rota, and statistics for both. It is equally a **learning project**: gaining first hands-on experience with **microservices**, and learning **Go and C#** (coming from a Java background). The design therefore deliberately pushes the boat out where it teaches something, and stays pragmatic where it doesn't.
+Happyhouse is a shared-household app for a uni house (~5 users): shared-cost ("kitty") tracking with flexible splits and transfer-minimising settlement, a fairness-balanced chore rota, and statistics for both. It also carries **personal finance tracking** ("wallet") for each user's own bank accounts, income, and budgets, independent of household membership — replacing per-user spreadsheets with the same regular-reconciliation discipline. It is equally a **learning project**: gaining first hands-on experience with **microservices**, and learning **Go and C#** (coming from a Java background). The design therefore deliberately pushes the boat out where it teaches something, and stays pragmatic where it doesn't.
 
 Foundational decisions:
 
@@ -29,6 +29,7 @@ flowchart TD
             household["household\n(Go)"]
             kitty["kitty\n(C#)"]
             chores["chores\n(C#)"]
+            wallet["wallet\n(C#)"]
         end
 
         Postgres[("Postgres\n1 instance\n1 DB per service")]
@@ -40,8 +41,9 @@ flowchart TD
     Traefik --> household
     Traefik --> kitty
     Traefik --> chores
+    Traefik --> wallet
 
-    auth & household & kitty & chores --> Postgres
+    auth & household & kitty & chores & wallet --> Postgres
     household & kitty & chores -. "Phase 5" .-> NATS
 ```
 
@@ -53,11 +55,14 @@ flowchart TD
 | **household** | Go | CRUD-heavy but simple domain; second Go service cements the language | Households, membership, roles, invites, activity feed |
 | **kitty** | C# / ASP.NET Core | Richest domain logic (splits, rounding, settlement algorithm, review periods) — benefits from C#'s expressive type system, LINQ, and a Java-familiar framework | Expenses, splits, money movements, balances, settlements, review schedules, spend stats |
 | **chores** | C# / ASP.NET Core | Second algorithm-heavy domain (recurrence, rota fairness) | Chores, occurrences, rota, swaps, completions, chore stats |
+| **wallet** | C# / ASP.NET Core | Same money/recurrence domain as kitty, applied to a single user instead of a household — a clean second application of patterns already established there, without the split/settlement complexity | Personal accounts, income sources, recurring/one-off expenses, transfers, budgets, inventory reconciliation, personal spend stats |
 | **frontend** | TypeScript / React | PWA, served as static files by Traefik/Caddy | UI, service worker, offline shell |
 
 A notification service (web push / email) is a **Phase 7** addition in Go, consuming events.
 
-Statistics live **inside the owning service** (kitty stats in kitty, chore stats in chores) — a separate reporting service would force cross-service data joins for zero benefit at this scale.
+Statistics live **inside the owning service** (kitty stats in kitty, chore stats in chores, wallet stats in wallet) — a separate reporting service would force cross-service data joins for zero benefit at this scale.
+
+**wallet is scoped by user, not by household** — unlike kitty and chores, it never calls the household service and has no membership checks. Its only cross-service dependency is JWT verification against auth. This means it has no ordering dependency on Phase 2 (Households) and can be built alongside it (see [ROADMAP.md](./ROADMAP.md)).
 
 ### 1.2 Communication
 
@@ -85,7 +90,7 @@ Two explicit base requirements of the project:
 
 ## 2. Domain design
 
-### 2.1 Shared recurrence model (used by kitty reviews, chores, recurring expenses)
+### 2.1 Shared recurrence model (used by kitty reviews, chores, recurring expenses, wallet income/expenses)
 
 One model satisfies "daily, weekly, monthly, annually, custom, or every N units, or K times every N units":
 
@@ -95,14 +100,18 @@ Recurrence {
   every:  int      // cycle length, e.g. 3
   unit:   DAY | WEEK | MONTH | YEAR
   anchor: date     // when the first cycle starts
+  until:  date?    // optional — when the recurrence stops (e.g. end of contract/term)
 }
 // "weekly"                 = {1, 1, WEEK}
 // "once every 2 days"      = {1, 2, DAY}
 // "twice every 3 months"   = {2, 3, MONTH}
+// "weekly, weeks 1-44"     = {1, 1, WEEK, until: anchor + 44 weeks}
 // plus a MANUAL sentinel (no auto-generation)
 ```
 
-Occurrence expansion: a cycle spans `every × unit` from the anchor; `times` occurrences are spaced evenly within each cycle. Month/year arithmetic uses "same day-of-month, clamped" (Jan 31 + 1 month = Feb 28/29). This model is implemented **once per language** in the shared lib and property-tested hard, because everything leans on it.
+Occurrence expansion: a cycle spans `every × unit` from the anchor; `times` occurrences are spaced evenly within each cycle, stopping once `until` is passed if set. Month/year arithmetic uses "same day-of-month, clamped" (Jan 31 + 1 month = Feb 28/29). This model is implemented **once per language** in the shared lib and property-tested hard, because everything leans on it.
+
+`until` exists because wallet's recurring income/expenses are typically bounded — a bus pass or a fixed-term work contract runs for a known number of weeks, not indefinitely — whereas kitty/chores recurrences are usually open-ended (`until` left unset).
 
 ### 2.2 Auth & users
 
@@ -158,17 +167,38 @@ Occurrence expansion: a cycle spans `every × unit` from the anchor; `times` occ
 
 **Completion & missed**: assignees mark done; a scheduled job marks occurrences `MISSED` when the deadline + grace period (configurable, default = until next occurrence) passes. Missed chores feed stats — deliberately no auto-punishment; the leaderboard is the social pressure.
 
-### 2.7 Statistics
+### 2.7 Wallet — personal accounts, income, and reconciliation
+
+Unlike kitty (shared, multi-user, one pot), wallet is **personal, single-user, multi-account** — modelled after replacing a per-user spreadsheet, not a splitting problem. No splits, no settlement, no membership checks.
+
+**Account**: user-owned, free-form type (current / savings / investment / other) — e.g. a main account, a weekly-spend account, a petrol account, a Stocks & Shares ISA.
+
+**Income**, two shapes:
+- **Recurring**: amount per cycle (reuses the shared recurrence model, `until`-bounded — e.g. a term-time job), destination account. Carries an **expected amount** distinct from what's actually received, so a variable-hours job (assumed 20hr/week) can be reconciled against real payslips rather than silently drifting.
+- **One-off**: named amount + date (loan instalments, gifts, prize draws) — also expected-vs-actual once received, for exactly the same reason.
+
+**Recurring expense**: same shape as recurring income but outgoing — subscriptions, rent amortised to a weekly-equivalent figure, a bus pass valid weeks 1–44. Also supports one-off (car insurance, a laptop).
+
+**Transfer**: a movement between the user's own accounts — the weekly £80 into a spending account, £30/month into a petrol account, or a periodic roundup lump sum into the ISA. Reuses kitty's money-movement concept (shifts balances, excluded from spend stats) but between accounts owned by one person rather than between household members. Roundups are recorded as the lump sum the bank actually sweeps, not computed per-card-transaction — no need to log every purchase individually.
+
+**Expense**: a spend against an account + category (user-defined, e.g. Food, Fun, Transport, Laundry, Self-care, Other), logged at whatever granularity the user chooses — a whole shopping trip as one line is normal, not an itemised receipt.
+
+**Budget line**: category → amount per period, **descriptive only** — feeds an actual-vs-budget "overspend" figure in stats, never a proactive alert. Mirrors kitty's stats-not-enforcement philosophy.
+
+**Inventory (reconciliation)** — the core anti-drift feature: the user enters the *actual* balance of an account (read off their banking app); the service computes the *expected* balance from the ledger (starting balance + income − expenses − outgoing transfers + incoming transfers) as of that moment; the diff is shown. The user can post it as an adjusting entry to bring the ledger back in sync — replacing the manual "fudge factor" line every ad hoc spreadsheet accumulates. Inventories can be triggered manually or on a schedule anchored to a real event (e.g. "N days after payday") rather than a fixed calendar date, since paydays and bill dates drift.
+
+### 2.8 Statistics
 
 Standard period picker everywhere: **week / month / year / all-time / custom range**.
 
 - **Kitty** (excludes money movements by construction): total spend, by category, by payer, per-member consumed share, trend over time, largest expenses.
 - **Chores**: completed / missed counts and rate per member, per chore, current streaks, "most reliable housemate" leaderboard.
+- **Wallet**: spend by category with budget-vs-actual ("overspend") per period, income expected-vs-actual variance over time, account balance trend, and a projected-remaining/runway figure (available funds minus known future recurring/one-off commitments over the weeks remaining) — the same shape as the spreadsheet's cash-flow-bridging calculations, but derived from the ledger instead of hand-maintained.
 - Served as JSON aggregates by the owning service; rendered client-side (Recharts or similar).
 
-### 2.8 Added features summary (beyond the original brief)
+### 2.9 Added features summary (beyond the original brief)
 
-Included in scope: activity feed, recurring expenses, effort-weighted chores, invite links, balance write-off, settled-period immutability, CSV export (kitty ledger — trivial, great for trust).
+Included in scope: activity feed, recurring expenses, effort-weighted chores, invite links, balance write-off, settled-period immutability, CSV export (kitty ledger — trivial, great for trust), personal wallet with inventory reconciliation.
 
 Deferred (v2+): push notifications (chore due / review day / added-to-expense), receipt photos, shopping list, email verification/reset, approval-based swaps.
 
@@ -179,7 +209,9 @@ Deferred (v2+): push notifications (chore due / review day / added-to-expense), 
 - **React + TypeScript + Vite**, `vite-plugin-pwa` (installable, offline app-shell + cached last-known data via TanStack Query persistence), **TanStack Router + Query**, Tailwind CSS, Recharts for stats.
 - Auth: access token in memory, refresh token in httpOnly cookie; silent refresh on 401.
 - Mobile-first layouts (it will live on phones); works on desktop for free.
-- Key screens: Login/Register → Household switcher → Household home (balance summary + upcoming chores) → Kitty (ledger, add expense with split UI, movements, settlement flow) → Chores (rota calendar, chore list, swap flow) → Stats → Household settings (members, invites, categories, review schedule).
+- Key screens: Login/Register → Household switcher → Household home (balance summary + upcoming chores) → Kitty (ledger, add expense with split UI, movements, settlement flow) → Chores (rota calendar, chore list, swap flow) → Wallet (accounts overview, income/expense setup, ledger entry, inventory flow, own stats) → Stats → Household settings (members, invites, categories, review schedule).
+
+Wallet lives alongside the household switcher rather than inside it — it's personal, so it's visible regardless of which household (if any) is currently selected.
 
 ## 4. Repository layout (monorepo)
 
@@ -193,6 +225,7 @@ happyhouse/
     household/        Go        (same shape)
     kitty/            C#        src/{Api,Application,Domain,Infrastructure}, tests/
     chores/           C#        (same shape)
+    wallet/           C#        (same shape)
   libs/
     go-common/        JWT middleware, recurrence, errors, event envelopes
     dotnet-common/    same for C#
