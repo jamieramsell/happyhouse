@@ -11,6 +11,7 @@ type UserRepository interface {
 
 var ErrEmailTaken = errors.New("email already registered")
 
+// Creates a new User account, and stores it to the repository.
 func NewUser(
 	userRepository UserRepository,
 	email string,

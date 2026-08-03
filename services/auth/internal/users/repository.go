@@ -17,6 +17,7 @@ var ErrEmptyPassword = errors.New("password_hash must not be empty.")
 var ErrInvalidEmailLength = errors.New("An email must not be empty, and must contain no more than 320 characters.")
 var ErrInvalidEmailFormat = errors.New("Incorrect email format")
 
+// In-memory implementation of a User repository for testing and development purposes only.
 type InMemoryUserRepository struct {
 	userIdMap    map[uuid.UUID]User
 	userEmailMap map[string]User
@@ -31,6 +32,7 @@ func NewInMemoryUserRepository() *InMemoryUserRepository {
 
 // Base methods
 
+// Persists a User to the repository
 func (repo *InMemoryUserRepository) Save(user User) (User, error) {
 	if err := validateMandatoryAttributes(user); err != nil {
 		return User{}, err
@@ -43,6 +45,7 @@ func (repo *InMemoryUserRepository) Save(user User) (User, error) {
 	return user, nil
 }
 
+// Finds and retrieves a User by their email
 func (repo *InMemoryUserRepository) FindByEmail(email string) (User, error) {
 	if err := validateEmailFormat(email); err != nil {
 		return User{}, err
@@ -55,6 +58,7 @@ func (repo *InMemoryUserRepository) FindByEmail(email string) (User, error) {
 	return user, nil
 }
 
+// Finds and retrieves a User by their ID
 func (repo *InMemoryUserRepository) FindById(id uuid.UUID) (User, error) {
 	var user = repo.userIdMap[id]
 	if user == (User{}) {
@@ -63,6 +67,7 @@ func (repo *InMemoryUserRepository) FindById(id uuid.UUID) (User, error) {
 	return user, nil
 }
 
+// Retrieves all User records from the repository
 func (repo *InMemoryUserRepository) FindAll() []User {
 	var userSlice = slices.Collect(maps.Values(repo.userIdMap))
 	if userSlice == nil { // Convert a nil pointer into an empty slice
@@ -71,6 +76,7 @@ func (repo *InMemoryUserRepository) FindAll() []User {
 	return userSlice
 }
 
+// Deletes the record of the User with the given email.
 func (repo *InMemoryUserRepository) DeleteByEmail(email string) error {
 	// Validate that the user exists lazily by using findByEmail()
 	user, err := repo.FindByEmail(email)
@@ -82,6 +88,7 @@ func (repo *InMemoryUserRepository) DeleteByEmail(email string) error {
 	return nil
 }
 
+// Deletes the record of the User with the given ID.
 func (repo *InMemoryUserRepository) DeleteById(id uuid.UUID) error {
 	// Validate that the user exists lazily by using findById()
 	user, err := repo.FindById(id)
@@ -95,6 +102,8 @@ func (repo *InMemoryUserRepository) DeleteById(id uuid.UUID) error {
 
 // Helper methods
 
+// Helper method which ensures that all caller-specified attributes of a User
+// are in the correct format.
 func validateMandatoryAttributes(user User) error {
 	if user.DisplayName == "" || len(user.DisplayName) > 50 {
 		return ErrInvalidDisplayNameLength
@@ -109,6 +118,7 @@ func validateMandatoryAttributes(user User) error {
 	return nil
 }
 
+// Helper method dedicated to checking the format of an email address
 func validateEmailFormat(email string) error {
 	// An email must not be empty, but must contain at most 320 chars.
 	if email == "" || len(email) > 320 {
@@ -133,6 +143,8 @@ func validateEmailFormat(email string) error {
 
 }
 
+// Helper method used to populate the attributes which don't need to be
+// specified by the caller.
 func populateOptionalAttributes(user User) User {
 	if user.Id == (uuid.UUID{}) {
 		user.Id = uuid.New()

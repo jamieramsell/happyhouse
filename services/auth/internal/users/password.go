@@ -8,6 +8,8 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
+// Takes a plaintext string as input, returning the hashed string, in the
+// standard PHC / modular-crypt format.
 func HashPassword(plaintext string) (string, error) {
 	const (
 		time    = 2
